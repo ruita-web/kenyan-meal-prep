@@ -4,12 +4,11 @@ import json
 import os
 import urllib.parse
 import uuid
-from ddgs import DDGS
-from supabase import create_client, Client
-from streamlit_cookies_manager import EncryptedCookieManager
 import io
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
+from supabase import create_client, Client
+from streamlit_cookies_manager import EncryptedCookieManager
 
 # --- 1. SETUP SECRETS, AI, & CLIENTS ---
 try:
@@ -47,7 +46,7 @@ st.markdown("""
     p { font-weight: 300; color: #b3b3b3; }
     .neon-text { color: #a3e635; font-weight: 600; }
     
-    /* Cards - Flexbox applied to ensure equal heights */
+    /* Cards */
     .meal-card, .workout-card {
         background: rgba(20, 30, 25, 0.4); backdrop-filter: blur(12px);
         border: 1px solid rgba(163, 230, 53, 0.15); border-radius: 24px;
@@ -59,9 +58,13 @@ st.markdown("""
         transform: translateY(-8px); border-color: rgba(163, 230, 53, 0.5); box-shadow: 0 15px 40px rgba(163, 230, 53, 0.15);
     }
     
-    /* Meal Images */
-    .meal-img { width: 100%; height: 180px; flex-shrink: 0; object-fit: cover; border-bottom: 2px solid rgba(163, 230, 53, 0.3); }
-    .meal-img-fallback { width: 100%; height: 180px; flex-shrink: 0; display: none; justify-content: center; align-items: center; font-size: 4rem; background: #111a15; border-bottom: 2px solid rgba(163, 230, 53, 0.3); }
+    /* Icon Headers for Meals */
+    .meal-icon-container {
+        width: 100%; height: 160px; display: flex; justify-content: center; align-items: center;
+        font-size: 5rem; background: linear-gradient(135deg, rgba(163, 230, 53, 0.1), rgba(10, 15, 12, 0.8));
+        border-bottom: 2px solid rgba(163, 230, 53, 0.3); flex-shrink: 0;
+        text-shadow: 0 0 20px rgba(163, 230, 53, 0.4);
+    }
     
     .meal-content { 
         padding: 20px; text-align: center; flex-grow: 1; 
@@ -218,37 +221,11 @@ def generate_grocery_list():
     """
     return get_ai_json(prompt, temp=0.2)
 
-def get_food_image_url(meal_name):
-    # 1. Try DuckDuckGo (Fast if it works locally)
-    try:
-        query = f"{meal_name} food"
-        with DDGS(timeout=3) as ddgs:
-            results = ddgs.images(query, max_results=1)
-            if results and len(results) > 0: 
-                return results[0]['image']
-    except Exception: 
-        pass
-        
-    # 2. Fallback to LoremFlickr (Reliable on Streamlit Cloud)
-    try:
-        safe_query = urllib.parse.quote(meal_name.replace(" ", ","))
-        return f"https://loremflickr.com/400/200/{safe_query},food/all"
-    except Exception:
-        pass
-        
-    return None
-
-def get_emoji(meal_name):
-    name = meal_name.lower()
-    if 'egg' in name: return '🍳'
-    if 'chicken' in name or 'kuku' in name: return '🍗'
-    if 'ugali' in name or 'githeri' in name or 'chapati' in name: return '🫓'
-    if 'rice' in name or 'wali' in name: return '🍚'
-    if 'meat' in name or 'beef' in name or 'nyama' in name: return '🥩'
-    if 'fish' in name or 'samaki' in name: return '🐟'
-    if 'sukuma' in name or 'greens' in name or 'managu' in name: return '🥬'
-    if 'bean' in name or 'ndengu' in name or 'lentil' in name: return '🫘'
-    return '🍲'
+def get_meal_icon(meal_type):
+    if meal_type.lower() == "breakfast": return "🌅"
+    if meal_type.lower() == "lunch": return "☀️"
+    if meal_type.lower() == "dinner": return "🌙"
+    return "🍽️"
 
 def get_ordered_days(plan_dict):
     standard_days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
@@ -408,12 +385,19 @@ elif page == "🥘 Nutrition Plan":
                 col_b, col_l, col_d = st.columns(3)
                 def render_meal(col, meal_type, meal_data):
                     with col:
-                        img_url = get_food_image_url(meal_data['name'])
-                        emoji = get_emoji(meal_data['name'])
-                        if not img_url: img_html = f'<div class="meal-img-fallback" style="display: flex;">{emoji}</div>'
-                        else: img_html = f'<img src="{img_url}" class="meal-img" loading="lazy" onerror="this.style.display=\'none\'; this.nextElementSibling.style.display=\'flex\';"><div class="meal-img-fallback">{emoji}</div>'
+                        icon = get_meal_icon(meal_type)
                         
-                        st.markdown(f'<div class="meal-card">{img_html}<div class="meal-content"><h4>{meal_type}</h4><h3>{meal_data["name"]}</h3><p>{meal_data["cost_kes"]} KES</p></div></div>', unsafe_allow_html=True)
+                        st.markdown(f'''
+                        <div class="meal-card">
+                            <div class="meal-icon-container">{icon}</div>
+                            <div class="meal-content">
+                                <h4>{meal_type}</h4>
+                                <h3>{meal_data["name"]}</h3>
+                                <p>{meal_data["cost_kes"]} KES</p>
+                            </div>
+                        </div>
+                        ''', unsafe_allow_html=True)
+                        
                         if st.button(f"🔄 Swap", key=f"swap_{day}_{meal_type}", use_container_width=True):
                             with st.spinner("Swapping..."):
                                 new_meal = swap_single_meal(day, meal_type, meal_data['name'])
@@ -421,6 +405,7 @@ elif page == "🥘 Nutrition Plan":
                                     st.session_state.meal_plan[day][meal_type] = new_meal
                                     persist_current_state()
                                     st.rerun()
+                                    
                 render_meal(col_b, "Breakfast", st.session_state.meal_plan[day]['Breakfast'])
                 render_meal(col_l, "Lunch", st.session_state.meal_plan[day]['Lunch'])
                 render_meal(col_d, "Dinner", st.session_state.meal_plan[day]['Dinner'])
