@@ -47,11 +47,12 @@ st.markdown("""
     p { font-weight: 300; color: #b3b3b3; }
     .neon-text { color: #a3e635; font-weight: 600; }
     
-    /* Cards */
+    /* Cards - Flexbox applied to ensure equal heights */
     .meal-card, .workout-card {
         background: rgba(20, 30, 25, 0.4); backdrop-filter: blur(12px);
         border: 1px solid rgba(163, 230, 53, 0.15); border-radius: 24px;
         padding: 0; margin-bottom: 20px; overflow: hidden; transition: all 0.4s ease; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        display: flex; flex-direction: column; height: 100%;
     }
     .workout-card { padding: 25px; }
     .workout-card:hover, .meal-card:hover {
@@ -59,12 +60,16 @@ st.markdown("""
     }
     
     /* Meal Images */
-    .meal-img { width: 100%; height: 180px; object-fit: cover; border-bottom: 2px solid rgba(163, 230, 53, 0.3); }
-    .meal-img-fallback { width: 100%; height: 180px; display: none; justify-content: center; align-items: center; font-size: 4rem; background: #111a15; border-bottom: 2px solid rgba(163, 230, 53, 0.3); }
-    .meal-content { padding: 20px; text-align: center; }
+    .meal-img { width: 100%; height: 180px; flex-shrink: 0; object-fit: cover; border-bottom: 2px solid rgba(163, 230, 53, 0.3); }
+    .meal-img-fallback { width: 100%; height: 180px; flex-shrink: 0; display: none; justify-content: center; align-items: center; font-size: 4rem; background: #111a15; border-bottom: 2px solid rgba(163, 230, 53, 0.3); }
+    
+    .meal-content { 
+        padding: 20px; text-align: center; flex-grow: 1; 
+        display: flex; flex-direction: column; justify-content: center; 
+    }
     .meal-content h4 { margin: 0; color: #a3e635; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 2px; }
     .meal-content h3 { margin: 8px 0; font-size: 1.3rem; color: #fff; font-family: 'Syne'; font-weight: 600; }
-    .meal-content p { margin: 0; color: #ffffff; font-size: 1.1rem; font-weight: 600; background: rgba(163, 230, 53, 0.1); display: inline-block; padding: 4px 12px; border-radius: 20px;}
+    .meal-content p { margin: 0 auto; color: #ffffff; font-size: 1.1rem; font-weight: 600; background: rgba(163, 230, 53, 0.1); display: inline-block; padding: 4px 12px; border-radius: 20px;}
     
     /* Workout Content */
     .workout-content h3 { margin: 0 0 15px 0; color: #a3e635; font-family: 'Syne'; font-size: 1.4rem; }
@@ -214,12 +219,23 @@ def generate_grocery_list():
     return get_ai_json(prompt, temp=0.2)
 
 def get_food_image_url(meal_name):
+    # 1. Try DuckDuckGo (Fast if it works locally)
     try:
         query = f"{meal_name} food"
-        with DDGS() as ddgs:
+        with DDGS(timeout=3) as ddgs:
             results = ddgs.images(query, max_results=1)
-            if results and len(results) > 0: return results[0]['image']
-    except Exception: pass
+            if results and len(results) > 0: 
+                return results[0]['image']
+    except Exception: 
+        pass
+        
+    # 2. Fallback to LoremFlickr (Reliable on Streamlit Cloud)
+    try:
+        safe_query = urllib.parse.quote(meal_name.replace(" ", ","))
+        return f"https://loremflickr.com/400/200/{safe_query},food/all"
+    except Exception:
+        pass
+        
     return None
 
 def get_emoji(meal_name):
