@@ -475,15 +475,8 @@ elif page == "🏋️ AI Trainer & Tracker":
                 for ex in day_data['exercises']:
                     search_query = urllib.parse.quote(f"How to do {ex}")
                     web_link = f"https://www.youtube.com/results?search_query={search_query}"
-                    app_link = f"youtube://results?search_query={search_query}"
                     
-                    link_html = f'''
-                    <a href="{app_link}" 
-                       onclick="setTimeout(function(){{ window.open('{web_link}', '_blank'); }}, 500);" 
-                       target="_blank" class="yt-link">
-                       ▶ TUTORIAL
-                    </a>
-                    '''
+                    link_html = f'<a href="{web_link}" target="_blank" rel="noopener noreferrer" class="yt-link">▶ TUTORIAL</a>'
                     exercises_html += f'<li><span>{ex}</span> {link_html}</li>'
                 
                 st.markdown(f'<div class="workout-card"><div class="workout-content"><h3>{day_data["focus"]}</h3><ul>{exercises_html}</ul></div></div>', unsafe_allow_html=True)
