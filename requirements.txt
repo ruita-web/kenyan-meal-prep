@@ -1,0 +1,6 @@
+﻿streamlit
+openai
+ddgs
+supabase
+streamlit-cookies-manager-v2
+reportlab
