@@ -60,7 +60,7 @@ st.markdown("""
     
     /* Icon Headers for Meals */
     .meal-icon-container {
-        width: 100%; height: 160px; display: flex; justify-content: center; align-items: center;
+        width: 100%; height: 140px; display: flex; justify-content: center; align-items: center;
         font-size: 5rem; background: linear-gradient(135deg, rgba(163, 230, 53, 0.1), rgba(10, 15, 12, 0.8));
         border-bottom: 2px solid rgba(163, 230, 53, 0.3); flex-shrink: 0;
         text-shadow: 0 0 20px rgba(163, 230, 53, 0.4);
@@ -72,7 +72,8 @@ st.markdown("""
     }
     .meal-content h4 { margin: 0; color: #a3e635; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 2px; }
     .meal-content h3 { margin: 8px 0; font-size: 1.3rem; color: #fff; font-family: 'Syne'; font-weight: 600; }
-    .meal-content p { margin: 0 auto; color: #ffffff; font-size: 1.1rem; font-weight: 600; background: rgba(163, 230, 53, 0.1); display: inline-block; padding: 4px 12px; border-radius: 20px;}
+    .meal-content p { margin: 0 auto 5px auto; color: #ffffff; font-size: 1.1rem; font-weight: 600; background: rgba(163, 230, 53, 0.1); display: inline-block; padding: 4px 12px; border-radius: 20px;}
+    .meal-cals { color: #9ca3af !important; font-size: 0.95rem !important; margin-top: 5px; font-weight: 400;}
     
     /* Workout Content */
     .workout-content h3 { margin: 0 0 15px 0; color: #a3e635; font-family: 'Syne'; font-size: 1.4rem; }
@@ -179,11 +180,13 @@ def generate_meal_plan():
     CRITICAL PRICING RULE: Use realistic 2024 Kenyan prices. 
     - A basic meal (e.g., Ugali, Sukuma, Eggs) costs between 80 and 150 KES. 
     - A meal with Beef/Chicken costs between 200 and 350 KES.
-    - Do NOT output unrealistic prices like 30 KES. Make the total weekly cost accurately reflect the weekly budget.
+    - Do NOT output unrealistic prices like 30 KES.
+    
+    CRITICAL CALORIE RULE: Estimate the calories for EACH meal. The sum of Breakfast, Lunch, and Dinner for each day MUST be approximately {st.session_state.calories} kcal.
     
     Use affordable Kenyan ingredients (Ugali, Sukuma Wiki, Managu, Githeri, Chapati, Ndengu, Rice, eggs, local fruits).
     Return ONLY a JSON object with this exact structure:
-    {{ "Monday": {{ "Breakfast": {{"name": "...", "cost_kes": 100}}, "Lunch": {{"name": "...", "cost_kes": 150}}, "Dinner": {{"name": "...", "cost_kes": 200}} }}, "Tuesday": {{ ... }}, "Wednesday": {{ ... }}, "Thursday": {{ ... }}, "Friday": {{ ... }}, "Saturday": {{ ... }}, "Sunday": {{ ... }} }}
+    {{ "Monday": {{ "Breakfast": {{"name": "...", "cost_kes": 100, "calories": 500}}, "Lunch": {{"name": "...", "cost_kes": 150, "calories": 700}}, "Dinner": {{"name": "...", "cost_kes": 200, "calories": 800}} }}, "Tuesday": {{ ... }}, "Wednesday": {{ ... }}, "Thursday": {{ ... }}, "Friday": {{ ... }}, "Saturday": {{ ... }}, "Sunday": {{ ... }} }}
     """
     return get_ai_json(prompt)
 
@@ -205,8 +208,8 @@ def swap_single_meal(day, meal_type, current_meal):
     prompt = f"""
     You are a Kenyan nutritionist. Replace {meal_type} on {day} which was currently "{current_meal}".
     Dietary restrictions: {st.session_state.diet}. Goal: {st.session_state.goal}.
-    IMPORTANT: Use realistic Kenyan prices (80-250 KES).
-    Return ONLY JSON: {{"name": "New Meal Name", "cost_kes": 150}}
+    IMPORTANT: Use realistic Kenyan prices (80-250 KES) and estimate realistic calories for the meal.
+    Return ONLY JSON: {{"name": "New Meal Name", "cost_kes": 150, "calories": 600}}
     """
     return get_ai_json(prompt, temp=0.8)
 
@@ -356,7 +359,7 @@ elif page == "🥘 Nutrition Plan":
     if not st.session_state.meal_plan:
         st.info("You haven't generated a meal plan yet (or you recently changed your profile).")
         if st.button("Generate 7-Day Meal Plan", use_container_width=True):
-            with st.spinner("Crafting your meals with realistic Kenyan prices..."):
+            with st.spinner("Crafting your meals with realistic Kenyan prices & calories..."):
                 plan = generate_meal_plan()
                 if plan:
                     st.session_state.meal_plan = plan
@@ -386,6 +389,7 @@ elif page == "🥘 Nutrition Plan":
                 def render_meal(col, meal_type, meal_data):
                     with col:
                         icon = get_meal_icon(meal_type)
+                        cals = meal_data.get('calories', 'N/A')
                         
                         st.markdown(f'''
                         <div class="meal-card">
@@ -394,6 +398,7 @@ elif page == "🥘 Nutrition Plan":
                                 <h4>{meal_type}</h4>
                                 <h3>{meal_data["name"]}</h3>
                                 <p>{meal_data["cost_kes"]} KES</p>
+                                <div class="meal-cals">🔥 {cals} kcal</div>
                             </div>
                         </div>
                         ''', unsafe_allow_html=True)
@@ -409,6 +414,10 @@ elif page == "🥘 Nutrition Plan":
                 render_meal(col_b, "Breakfast", st.session_state.meal_plan[day]['Breakfast'])
                 render_meal(col_l, "Lunch", st.session_state.meal_plan[day]['Lunch'])
                 render_meal(col_d, "Dinner", st.session_state.meal_plan[day]['Dinner'])
+                
+                # Calculate and display daily total calories
+                daily_cals = sum(m.get('calories', 0) for m in st.session_state.meal_plan[day].values())
+                st.markdown(f"<h4 style='text-align: center; color: #a3e635; margin-top: 15px;'>Daily Total: {daily_cals} kcal</h4>", unsafe_allow_html=True)
 
         st.markdown("<br><br>", unsafe_allow_html=True)
         st.markdown("### 🛒 Grocery List")
