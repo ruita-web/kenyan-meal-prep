@@ -22,7 +22,6 @@ except Exception:
 
 # Initialize Clients
 client = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=GROQ_API_KEY)
-# --- UPDATED MODEL LIST ---
 GROQ_MODELS = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"]
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -160,7 +159,6 @@ def calculate_daily_calories(weight, height, age, gender, activity, goal):
     else: return int(tdee)
 
 def get_ai_json(prompt, temp=0.7):
-    """Bulletproof JSON handler with model fallback and specific error logging."""
     for model_name in GROQ_MODELS:
         try:
             response = client.chat.completions.create(
@@ -171,12 +169,8 @@ def get_ai_json(prompt, temp=0.7):
             )
             return json.loads(response.choices[0].message.content)
         except json.JSONDecodeError:
-            # If the AI returns broken JSON, log a warning and try the next model
-            st.warning(f"Model {model_name} returned bad data. Trying backup...")
             continue
         except Exception as e: 
-            # Catch API errors (e.g., rate limits)
-            st.warning(f"Model {model_name} failed: {str(e)}")
             continue 
             
     st.error("🚨 All AI models failed to generate a response. Please try again in a minute.")
@@ -184,21 +178,24 @@ def get_ai_json(prompt, temp=0.7):
 
 def generate_meal_plan():
     protein_instruction = "Prioritize high-protein foods (Eggs, Ndengu, Beans, Chicken, Beef, Fish)." if st.session_state.goal == "Build Muscle" else "Keep meals balanced."
+    
+    # We completely rewrote the budget rules here to FORCE the AI to obey the budget
     prompt = f"""
     You are a Kenyan nutritionist. Create a 7-day meal plan (Monday to Sunday).
-    Target: {st.session_state.calories} calories/day. Weekly Budget: {st.session_state.budget} KES.
+    Target: {st.session_state.calories} calories/day. 
+    
+    **CRITICAL BUDGET RULE: The user's MAXIMUM weekly budget is {st.session_state.budget} KES.**
+    You MUST calculate the total cost of all 21 meals and ensure it is LESS THAN OR EQUAL TO {st.session_state.budget} KES. 
+    - If the budget is very low (e.g., under 2000 KES), you MUST use extremely cheap meals (e.g., plain Ugali and Sukuma, Githeri without meat, Porridge) to fit the budget. Do NOT add expensive meat.
+    - If the budget is high (e.g., over 4000 KES), you may include expensive meals like Beef or Chicken.
+    - The total cost MUST NOT exceed the budget under any circumstances.
+
     Dietary restrictions: {st.session_state.diet}. User Goal: {st.session_state.goal}. {protein_instruction}
-    
-    CRITICAL PRICING RULE: Use realistic 2024 Kenyan prices. 
-    - A basic meal (e.g., Ugali, Sukuma, Eggs) costs between 80 and 150 KES. 
-    - A meal with Beef/Chicken costs between 200 and 350 KES.
-    - Do NOT output unrealistic prices like 30 KES.
-    
     CRITICAL CALORIE RULE: Estimate the calories for EACH meal. The sum of Breakfast, Lunch, and Dinner for each day MUST be approximately {st.session_state.calories} kcal.
     
-    Use affordable Kenyan ingredients (Ugali, Sukuma Wiki, Managu, Githeri, Chapati, Ndengu, Rice, eggs, local fruits).
+    Use affordable Kenyan ingredients.
     Return ONLY a JSON object with this exact structure:
-    {{ "Monday": {{ "Breakfast": {{"name": "...", "cost_kes": 100, "calories": 500}}, "Lunch": {{"name": "...", "cost_kes": 150, "calories": 700}}, "Dinner": {{"name": "...", "cost_kes": 200, "calories": 800}} }}, "Tuesday": {{ ... }}, "Wednesday": {{ ... }}, "Thursday": {{ ... }}, "Friday": {{ ... }}, "Saturday": {{ ... }}, "Sunday": {{ ... }} }}
+    {{ "Monday": {{ "Breakfast": {{"name": "...", "cost_kes": 50, "calories": 500}}, "Lunch": {{"name": "...", "cost_kes": 70, "calories": 700}}, "Dinner": {{"name": "...", "cost_kes": 80, "calories": 800}} }}, "Tuesday": {{ ... }}, "Wednesday": {{ ... }}, "Thursday": {{ ... }}, "Friday": {{ ... }}, "Saturday": {{ ... }}, "Sunday": {{ ... }} }}
     """
     return get_ai_json(prompt)
 
@@ -217,11 +214,15 @@ def generate_workout_plan():
     return get_ai_json(prompt)
 
 def swap_single_meal(day, meal_type, current_meal):
+    # Check the average budget per meal so we don't blow the budget on a swap
+    avg_budget_per_meal = st.session_state.budget / 21
+    
     prompt = f"""
     You are a Kenyan nutritionist. Replace {meal_type} on {day} which was currently "{current_meal}".
     Dietary restrictions: {st.session_state.diet}. Goal: {st.session_state.goal}.
-    IMPORTANT: Use realistic Kenyan prices (80-250 KES) and estimate realistic calories for the meal.
-    Return ONLY JSON: {{"name": "New Meal Name", "cost_kes": 150, "calories": 600}}
+    IMPORTANT BUDGET RULE: The new meal should cost around {avg_budget_per_meal:.0f} KES or less to stay within the weekly budget.
+    Estimate realistic calories for the meal.
+    Return ONLY JSON: {{"name": "New Meal Name", "cost_kes": {avg_budget_per_meal:.0f}, "calories": 600}}
     """
     return get_ai_json(prompt, temp=0.8)
 
@@ -371,7 +372,7 @@ elif page == "🥘 Nutrition Plan":
     if not st.session_state.meal_plan:
         st.info("You haven't generated a meal plan yet (or you recently changed your profile).")
         if st.button("Generate 7-Day Meal Plan", use_container_width=True):
-            with st.spinner("Crafting your meals with realistic Kenyan prices & calories..."):
+            with st.spinner("Crafting your meals within your budget..."):
                 plan = generate_meal_plan()
                 if plan:
                     st.session_state.meal_plan = plan
