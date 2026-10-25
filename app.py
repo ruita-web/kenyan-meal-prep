@@ -22,7 +22,8 @@ except Exception:
 
 # Initialize Clients
 client = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=GROQ_API_KEY)
-GROQ_MODELS = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"]
+# Swapped to faster models to prevent rate limits during heavy 7-day JSON generation
+GROQ_MODELS = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Initialize Cookie Manager
@@ -159,15 +160,26 @@ def calculate_daily_calories(weight, height, age, gender, activity, goal):
     else: return int(tdee)
 
 def get_ai_json(prompt, temp=0.7):
+    """Bulletproof JSON handler with model fallback and specific error logging."""
     for model_name in GROQ_MODELS:
         try:
             response = client.chat.completions.create(
-                model=model_name, messages=[{"role": "user", "content": prompt}],
-                temperature=temp, response_format={"type": "json_object"}
+                model=model_name, 
+                messages=[{"role": "user", "content": prompt}],
+                temperature=temp, 
+                response_format={"type": "json_object"}
             )
             return json.loads(response.choices[0].message.content)
-        except Exception: continue 
-    st.error("🚨 AI Error. Check connection.")
+        except json.JSONDecodeError:
+            # If the AI returns broken JSON, log a warning and try the next model
+            st.warning(f"Model {model_name} returned bad data. Trying backup...")
+            continue
+        except Exception as e: 
+            # Catch API errors (e.g., rate limits)
+            st.warning(f"Model {model_name} failed: {str(e)}")
+            continue 
+            
+    st.error("🚨 All AI models failed to generate a response. Please try again in a minute.")
     return None
 
 def generate_meal_plan():
