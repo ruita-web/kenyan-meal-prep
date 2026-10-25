@@ -22,8 +22,8 @@ except Exception:
 
 # Initialize Clients
 client = OpenAI(base_url="https://api.groq.com/openai/v1", api_key=GROQ_API_KEY)
-# Swapped to faster models to prevent rate limits during heavy 7-day JSON generation
-GROQ_MODELS = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
+# --- UPDATED MODEL LIST ---
+GROQ_MODELS = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"]
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Initialize Cookie Manager
